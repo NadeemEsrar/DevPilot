@@ -11,19 +11,22 @@ import java.util.Optional;
 /** All SQL for the "repositories" table. */
 public class RepositoryDAO {
 
-    /**
-     * Insert or update one repo. "Upsert" matters because in Phase 4 we will
-     * re-sync the list from GitHub repeatedly and must not create duplicates.
-     */
-    public Repository save(Repository repo) throws SQLException {
-        String sql = "INSERT INTO repositories (user_id, gh_repo_id, owner, name, full_name, is_private, "
+    // Shared by save and saveAll so they can never drift apart
+    private static final String UPSERT_SQL =
+            "INSERT INTO repositories (user_id, gh_repo_id, owner, name, full_name, is_private, "
                    + "default_branch, language, html_url, description) VALUES (?,?,?,?,?,?,?,?,?,?) "
                    + "ON CONFLICT(user_id, gh_repo_id) DO UPDATE SET owner=excluded.owner, name=excluded.name, "
                    + "full_name=excluded.full_name, is_private=excluded.is_private, "
                    + "default_branch=excluded.default_branch, language=excluded.language, "
                    + "html_url=excluded.html_url, description=excluded.description";
+
+    /**
+     * Insert or update one repo. "Upsert" matters because in Phase 4 we will
+     * re-sync the list from GitHub repeatedly and must not create duplicates.
+     */
+    public Repository save(Repository repo) throws SQLException {
         try (Connection conn = DBConnection.getConnection();
-             PreparedStatement ps = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(UPSERT_SQL)) {
             bind(ps, repo);
             ps.executeUpdate();
         }
@@ -42,12 +45,7 @@ public class RepositoryDAO {
             try {
                 for (Repository r : repos) {
                     // reuse the same connection so all rows share the transaction
-                    try (PreparedStatement ps = conn.prepareStatement(
-                            "INSERT INTO repositories (user_id, gh_repo_id, owner, name, full_name, is_private, "
-                          + "default_branch, language, html_url, description) VALUES (?,?,?,?,?,?,?,?,?,?) "
-                          + "ON CONFLICT(user_id, gh_repo_id) DO UPDATE SET full_name=excluded.full_name, "
-                          + "is_private=excluded.is_private, default_branch=excluded.default_branch, "
-                          + "language=excluded.language, description=excluded.description")) {
+                    try (PreparedStatement ps = conn.prepareStatement(UPSERT_SQL)) {
                         bind(ps, r);
                         ps.executeUpdate();
                     }
