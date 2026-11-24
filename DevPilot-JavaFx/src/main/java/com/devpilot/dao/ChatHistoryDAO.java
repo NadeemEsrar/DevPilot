@@ -35,7 +35,7 @@ public class ChatHistoryDAO {
         List<ChatMessage> list = new ArrayList<>();
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(
-                     "SELECT * FROM chat_history WHERE user_id = ? AND repo_id = ? ORDER BY timestamp, id")) {
+                     "SELECT * FROM chat_history WHERE user_id = ? AND repo_id = ? ORDER BY id")) {
             ps.setInt(1, userId);
             ps.setInt(2, repoId);
             try (ResultSet rs = ps.executeQuery()) {

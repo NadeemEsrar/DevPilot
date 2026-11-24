@@ -1,5 +1,6 @@
 package com.devpilot;
 
+import com.devpilot.dao.ChatHistoryDAO;
 import com.devpilot.dao.UserDAO;
 import com.devpilot.model.Repository;
 import com.devpilot.model.User;
@@ -25,6 +26,7 @@ public class DevPilotApp extends Application {
     private static final String WELCOME = "Ask questions about your GitHub repositories";
 
     private final Scene scene = new Scene(new StackPane(), 900, 600);
+    private final ChatHistoryDAO chatDAO = new ChatHistoryDAO();
     private final UserDAO userDAO = new UserDAO();
     private final GitHubAuthService auth;
     private final RepoSyncService syncService;
@@ -72,7 +74,7 @@ public class DevPilotApp extends Application {
     }
 
     private void showChat(Repository repo) {
-        show(new ChatView(user, repo, rag, this::showDashboard));
+        show(new ChatView(user, repo, rag, chatDAO, this::showDashboard));
     }
 
     private void show(Parent screen) {

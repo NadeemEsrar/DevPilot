@@ -1,5 +1,7 @@
 package com.devpilot.ui;
 
+import com.devpilot.dao.ChatHistoryDAO;
+import com.devpilot.model.ChatMessage;
 import com.devpilot.model.Repository;
 import com.devpilot.model.User;
 import com.devpilot.service.RagClientService;
@@ -9,6 +11,7 @@ import com.devpilot.util.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import javafx.animation.PauseTransition;
+import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -26,19 +29,21 @@ import javafx.util.Duration;
 
 import java.net.ConnectException;
 import java.net.http.HttpTimeoutException;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 
-/** Chat about one repository. Phase 9 saves the conversation. */
+/** Chat about one repository. The conversation is saved in the local database. */
 public class ChatView extends BorderPane {
     private static final int MAX_QUESTION_LENGTH = 2000; // same limit as the RAG service
 
     private final User user;
     private final Repository repo;
     private final RagClientService rag;
+    private final ChatHistoryDAO history;
     private final VBox messages = new VBox(10);
     private final ScrollPane scroll = new ScrollPane(messages);
     private final TextField input = new TextField();
@@ -56,10 +61,11 @@ public class ChatView extends BorderPane {
     private Task<?> askTask;
     private Task<?> indexTask;
 
-    public ChatView(User user, Repository repo, RagClientService rag, Runnable onBack) {
+    public ChatView(User user, Repository repo, RagClientService rag, ChatHistoryDAO history, Runnable onBack) {
         this.user = user;
         this.repo = repo;
         this.rag = rag;
+        this.history = history;
 
         Button backButton = new Button("Back");
         backButton.setId("back");
@@ -106,6 +112,7 @@ public class ChatView extends BorderPane {
         setCenter(scroll);
         setBottom(inputBar);
         BorderPane.setMargin(scroll, new Insets(16, 0, 16, 0));
+        loadHistory();
         loadIndex();
     }
 
@@ -171,6 +178,26 @@ public class ChatView extends BorderPane {
 
     // ---- questions ----
 
+    private void loadHistory() {
+        try {
+            for (ChatMessage saved : history.findByUserAndRepo(user.getId(), repo.getId())) {
+                addMessage(saved.getQuestion(), "question");
+                addMessage(saved.getAnswer(), "answer");
+            }
+            Platform.runLater(this::scrollToEnd); // after this screen is in the window
+        } catch (SQLException e) {
+            addMessage("Could not load the saved conversation.", "answer").getStyleClass().add("error");
+        }
+    }
+
+    private void save(String question, String answer) {
+        try {
+            history.save(new ChatMessage(user.getId(), repo.getId(), question, answer));
+        } catch (SQLException e) {
+            addMessage("This answer could not be saved.", "answer").getStyleClass().add("error");
+        }
+    }
+
     private void send() {
         String question = input.getText().strip();
         if (question.isEmpty()) return;
@@ -181,7 +208,10 @@ public class ChatView extends BorderPane {
         asking = true;
         updateControls();
         askTask = Background.run(() -> rag.ask(user, repo, question),
-                text -> finish(answer, text),
+                text -> {
+                    finish(answer, text);
+                    save(question, text);
+                },
                 error -> {
                     answer.getStyleClass().add("error");
                     finish(answer, errorText(error));
