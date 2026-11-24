@@ -1,0 +1,6 @@
+.root { -fx-font-size: 14px; }
+.title { -fx-font-size: 36px; -fx-font-weight: bold; }
+.heading { -fx-font-size: 20px; -fx-font-weight: bold; }
+.message { -fx-padding: 10px; -fx-background-radius: 8px; }
+.question { -fx-background-color: #d6e8ff; }
+.answer { -fx-background-color: #e4e4e4; }
