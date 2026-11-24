@@ -53,6 +53,19 @@ public class UserDAO {
         }
     }
 
+    /** Leaves the token alone, so a late refresh can't undo a logout. */
+    public void updateProfile(User user) throws SQLException {
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "UPDATE users SET github_username=?, display_name=?, avatar_url=? WHERE id=?")) {
+            ps.setString(1, user.getGithubUsername());
+            ps.setString(2, user.getDisplayName());
+            ps.setString(3, user.getAvatarUrl());
+            ps.setInt(4, user.getId());
+            ps.executeUpdate();
+        }
+    }
+
     public Optional<User> findById(int id) throws SQLException {
         return findOne("SELECT * FROM users WHERE id = ?", id);
     }

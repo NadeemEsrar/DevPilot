@@ -5,8 +5,10 @@ import com.devpilot.util.DBConnection;
 
 import java.sql.*;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /** All SQL for the "repositories" table. */
 public class RepositoryDAO {
@@ -40,22 +42,36 @@ public class RepositoryDAO {
      * and it is much faster than committing each row separately.
      */
     public void saveAll(List<Repository> repos) throws SQLException {
-        try (Connection conn = DBConnection.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                for (Repository r : repos) {
-                    // reuse the same connection so all rows share the transaction
-                    try (PreparedStatement ps = conn.prepareStatement(UPSERT_SQL)) {
-                        bind(ps, r);
-                        ps.executeUpdate();
+        inTransaction(conn -> upsertAll(conn, repos));
+    }
+
+    /**
+     * Makes the user's rows match this COMPLETE list: upserts every repo in it and
+     * deletes the rest. Deleting a repo also deletes its chats (ON DELETE CASCADE).
+     */
+    public void sync(int userId, List<Repository> repos) throws SQLException {
+        Set<Long> keep = new HashSet<>();
+        for (Repository r : repos) keep.add(r.getGhRepoId());
+
+        inTransaction(conn -> {
+            upsertAll(conn, repos);
+            List<Integer> missing = new ArrayList<>();
+            try (PreparedStatement ps = conn.prepareStatement(
+                    "SELECT id, gh_repo_id FROM repositories WHERE user_id = ?")) {
+                ps.setInt(1, userId);
+                try (ResultSet rs = ps.executeQuery()) {
+                    while (rs.next()) {
+                        if (!keep.contains(rs.getLong("gh_repo_id"))) missing.add(rs.getInt("id"));
                     }
                 }
-                conn.commit();
-            } catch (SQLException e) {
-                conn.rollback();
-                throw e;
             }
-        }
+            try (PreparedStatement ps = conn.prepareStatement("DELETE FROM repositories WHERE id = ?")) {
+                for (int id : missing) {
+                    ps.setInt(1, id);
+                    ps.executeUpdate();
+                }
+            }
+        });
     }
 
     public List<Repository> findByUserId(int userId) throws SQLException {
@@ -102,6 +118,33 @@ public class RepositoryDAO {
     }
 
     // ---- helpers ----
+
+    private interface SqlWork {
+        void run(Connection conn) throws SQLException;
+    }
+
+    /** Commits if the work succeeds, rolls back if it throws anything. */
+    private void inTransaction(SqlWork work) throws SQLException {
+        try (Connection conn = DBConnection.getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                work.run(conn);
+                conn.commit();
+            } catch (SQLException | RuntimeException e) {
+                conn.rollback();
+                throw e;
+            }
+        }
+    }
+
+    private void upsertAll(Connection conn, List<Repository> repos) throws SQLException {
+        try (PreparedStatement ps = conn.prepareStatement(UPSERT_SQL)) {
+            for (Repository r : repos) {
+                bind(ps, r);
+                ps.executeUpdate();
+            }
+        }
+    }
 
     private void bind(PreparedStatement ps, Repository r) throws SQLException {
         ps.setInt(1, r.getUserId());

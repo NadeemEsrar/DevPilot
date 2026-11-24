@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /** Logs a user in with GitHub's OAuth Device Flow. Knows nothing about SQL or UI. */
@@ -81,6 +82,14 @@ public class GitHubAuthService {
         return new User(json.required("id").asLong(), required(json, "login"),
                 json.path("name").asText(null), json.path("avatar_url").asText(null),
                 token.accessToken(), token.scope());
+    }
+
+    /** True if a token with this granted scope has everything we ask for. */
+    public static boolean hasRequiredScope(String granted) {
+        if (granted == null) return false;
+        // GitHub reports granted scopes separated by commas
+        return List.of(granted.split("[,\\s]+"))
+                .containsAll(List.of(AppConfig.get("github.scope").split("\\s+")));
     }
 
     private static String required(JsonNode json, String field) throws AuthException {
