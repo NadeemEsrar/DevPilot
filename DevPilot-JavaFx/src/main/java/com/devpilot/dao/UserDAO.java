@@ -61,6 +61,16 @@ public class UserDAO {
         return findOne("SELECT * FROM users WHERE github_id = ?", githubId);
     }
 
+    /** The most recently added user that still has a token, if any. */
+    public Optional<User> findLoggedIn() throws SQLException {
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(
+                     "SELECT * FROM users WHERE access_token IS NOT NULL ORDER BY id DESC LIMIT 1");
+             ResultSet rs = ps.executeQuery()) {
+            return rs.next() ? Optional.of(mapRow(rs)) : Optional.empty();
+        }
+    }
+
     /** Clears the token on logout but keeps the user's row (and their chat history). */
     public void clearToken(int userId) throws SQLException {
         try (Connection conn = DBConnection.getConnection();

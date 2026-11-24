@@ -12,7 +12,7 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Override with -Dexec.mainClass=... -->
-        <exec.mainClass>com.devpilot.Phase3Demo</exec.mainClass>
+        <exec.mainClass>com.devpilot.Phase4Demo</exec.mainClass>
     </properties>
 
     <dependencies>
