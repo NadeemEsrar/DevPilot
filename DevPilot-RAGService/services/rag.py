@@ -50,7 +50,7 @@ def ask(repo: str, branch: str | None, question: str, token: str | None) -> str:
     if found is None:
         raise ServiceError(409, "Create the vector embeddings for this repository first.")
     text = llm_client.answer(ref.full_name, question, found)
-    sources = dict.fromkeys(f"{c.path}:{c.start}-{c.end}" for c in found)
+    sources = dict.fromkeys(f"{c.metadata['path']}:{c.metadata['start']}-{c.metadata['end']}" for c in found)
     return f"{text}\n\nSearched excerpts:\n" + "\n".join(sources)
 
 
