@@ -20,29 +20,31 @@ SKIP_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".jks", ".keystore", ".csv", ".
 
 
 @dataclass(frozen=True)
-class RepoVersion:
+class RepoRef:
     repo_id: int
     full_name: str
     branch: str
-    sha: str
 
 
-def resolve(repo: str, branch: str | None, token: str | None) -> RepoVersion:
-    """Runs on every question: proves access and finds the newest commit."""
+def resolve(repo: str, branch: str | None, token: str | None) -> RepoRef:
+    """Runs on every request: proves the user can read the repository."""
     with _client(token) as client:
         info = _get(client, f"/repos/{repo}").json()
-        branch = branch or info["default_branch"]
-        commit = _get(client, f"/repositories/{info['id']}/commits/{quote(branch, safe='')}").json()
-    return RepoVersion(info["id"], info["full_name"], branch, commit["sha"])
+    return RepoRef(info["id"], info["full_name"], branch or info["default_branch"])
 
 
-def download(version: RepoVersion, token: str | None) -> dict[str, str]:
+def latest_commit(ref: RepoRef, token: str | None) -> str:
+    with _client(token) as client:
+        return _get(client, f"/repositories/{ref.repo_id}/commits/{quote(ref.branch, safe='')}").json()["sha"]
+
+
+def download(ref: RepoRef, sha: str, token: str | None) -> dict[str, str]:
     """Returns {path: text} for the files worth indexing."""
     data = bytearray()
     try:
         # httpx drops the Authorization header when GitHub redirects to another host
         with _client(token) as client, client.stream(
-                "GET", f"/repositories/{version.repo_id}/zipball/{version.sha}") as response:
+                "GET", f"/repositories/{ref.repo_id}/zipball/{sha}") as response:
             _check(response)
             for part in response.iter_bytes():
                 data += part
