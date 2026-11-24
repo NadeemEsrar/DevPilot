@@ -5,6 +5,7 @@ import com.devpilot.model.Repository;
 import com.devpilot.model.User;
 import com.devpilot.service.GitHubAuthService;
 import com.devpilot.service.GitHubRepoService;
+import com.devpilot.service.RagClientService;
 import com.devpilot.service.RepoSyncService;
 import com.devpilot.ui.ChatView;
 import com.devpilot.ui.DashboardView;
@@ -27,6 +28,7 @@ public class DevPilotApp extends Application {
     private final UserDAO userDAO = new UserDAO();
     private final GitHubAuthService auth;
     private final RepoSyncService syncService;
+    private final RagClientService rag = new RagClientService();
     private User user;
 
     public DevPilotApp() {
@@ -70,7 +72,7 @@ public class DevPilotApp extends Application {
     }
 
     private void showChat(Repository repo) {
-        show(new ChatView(repo, this::showDashboard));
+        show(new ChatView(repo, rag, this::showDashboard));
     }
 
     private void show(Parent screen) {

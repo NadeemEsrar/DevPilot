@@ -4,3 +4,4 @@
 .message { -fx-padding: 10px; -fx-background-radius: 8px; }
 .question { -fx-background-color: #d6e8ff; }
 .answer { -fx-background-color: #e4e4e4; }
+.error { -fx-background-color: #ffdcdc; }

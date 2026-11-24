@@ -67,6 +67,10 @@ public class HttpClientWrapper {
     private HttpRequest.Builder newRequest(String url, Map<String, String> headers) {
         HttpRequest.Builder builder = HttpRequest.newBuilder(URI.create(url))
                 .timeout(Duration.ofSeconds(30));
+        if (url.startsWith("http://")) {
+            // uvicorn can't do the HTTP/2 upgrade Java attempts on plain HTTP
+            builder.version(HttpClient.Version.HTTP_1_1);
+        }
         headers.forEach(builder::setHeader);
         return builder;
     }
