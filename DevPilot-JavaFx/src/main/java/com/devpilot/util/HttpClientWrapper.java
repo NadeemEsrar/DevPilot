@@ -40,9 +40,10 @@ public class HttpClientWrapper {
     }
 
     /** Sends the body as JSON. */
-    public String post(String url, String jsonBody, Map<String, String> headers)
+    public String post(String url, String jsonBody, Map<String, String> headers, Duration timeout)
             throws IOException, InterruptedException {
         return send(newRequest(url, headers)
+                .timeout(timeout)
                 .setHeader("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build());

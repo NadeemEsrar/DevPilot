@@ -1,8 +1,12 @@
 package com.devpilot.ui;
 
 import com.devpilot.model.Repository;
+import com.devpilot.model.User;
 import com.devpilot.service.RagClientService;
 import com.devpilot.util.HttpClientWrapper.HttpStatusException;
+import com.devpilot.util.JsonUtil;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -23,6 +27,7 @@ import java.net.http.HttpTimeoutException;
 public class ChatView extends BorderPane {
     private static final int MAX_QUESTION_LENGTH = 2000; // same limit as the RAG service
 
+    private final User user;
     private final Repository repo;
     private final RagClientService rag;
     private final VBox messages = new VBox(10);
@@ -31,7 +36,8 @@ public class ChatView extends BorderPane {
     private final Button sendButton = new Button("Send");
     private Task<?> task;
 
-    public ChatView(Repository repo, RagClientService rag, Runnable onBack) {
+    public ChatView(User user, Repository repo, RagClientService rag, Runnable onBack) {
+        this.user = user;
         this.repo = repo;
         this.rag = rag;
 
@@ -72,10 +78,10 @@ public class ChatView extends BorderPane {
         if (question.isEmpty()) return;
 
         addMessage(question, "question");
-        Label answer = addMessage("Thinking...", "answer");
+        Label answer = addMessage("Thinking... (the first question about a repository takes longer)", "answer");
         input.clear();
         setBusy(true);
-        task = Background.run(() -> rag.ask(repo, question),
+        task = Background.run(() -> rag.ask(user, repo, question),
                 text -> finish(answer, text),
                 error -> {
                     answer.getStyleClass().add("error");
@@ -100,9 +106,20 @@ public class ChatView extends BorderPane {
         if (error instanceof ConnectException) return "Can't reach the RAG service. Is it running?";
         if (error instanceof HttpTimeoutException) return "The RAG service took too long to answer.";
         if (error instanceof HttpStatusException http) {
-            return "The RAG service returned an error (HTTP " + http.getStatusCode() + ").";
+            return serviceMessage(http);
         }
         return "Could not get an answer.";
+    }
+
+    /** FastAPI puts our message in "detail"; validation errors use a list there instead. */
+    private static String serviceMessage(HttpStatusException error) {
+        try {
+            JsonNode detail = JsonUtil.parse(error.getBody()).path("detail");
+            if (detail.isTextual()) return detail.asText();
+        } catch (JsonProcessingException e) {
+            // not JSON: use the general message
+        }
+        return "The RAG service returned an error (HTTP " + error.getStatusCode() + ").";
     }
 
     private Label addMessage(String text, String styleClass) {

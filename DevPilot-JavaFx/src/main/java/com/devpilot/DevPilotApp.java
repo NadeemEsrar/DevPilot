@@ -72,7 +72,7 @@ public class DevPilotApp extends Application {
     }
 
     private void showChat(Repository repo) {
-        show(new ChatView(repo, rag, this::showDashboard));
+        show(new ChatView(user, repo, rag, this::showDashboard));
     }
 
     private void show(Parent screen) {
