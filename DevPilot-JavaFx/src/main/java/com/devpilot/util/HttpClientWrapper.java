@@ -2,11 +2,14 @@ package com.devpilot.util;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /** Sends HTTP requests and turns non-2xx statuses into exceptions. */
 public class HttpClientWrapper {
@@ -43,6 +46,22 @@ public class HttpClientWrapper {
                 .setHeader("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
                 .build());
+    }
+
+    /** Sends the fields as an HTML form would: key=value&key=value. */
+    public String postForm(String url, Map<String, String> fields, Map<String, String> headers)
+            throws IOException, InterruptedException {
+        String body = fields.entrySet().stream()
+                .map(f -> encode(f.getKey()) + "=" + encode(f.getValue()))
+                .collect(Collectors.joining("&"));
+        return send(newRequest(url, headers)
+                .setHeader("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build());
+    }
+
+    private static String encode(String text) {
+        return URLEncoder.encode(text, StandardCharsets.UTF_8);
     }
 
     private HttpRequest.Builder newRequest(String url, Map<String, String> headers) {

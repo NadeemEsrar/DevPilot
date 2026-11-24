@@ -7,7 +7,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.Properties;
 
 /**
  * The single place that knows HOW to reach the database.
@@ -17,19 +16,9 @@ import java.util.Properties;
  */
 public final class DBConnection {
 
-    private static final String URL = loadUrl();
+    private static final String URL = AppConfig.get("db.url");
 
     private DBConnection() { } // utility class: no instances
-
-    private static String loadUrl() {
-        Properties props = new Properties();
-        try (InputStream in = DBConnection.class.getResourceAsStream("/application.properties")) {
-            if (in != null) props.load(in);
-        } catch (IOException e) {
-            throw new IllegalStateException("Cannot read application.properties", e);
-        }
-        return props.getProperty("db.url", "jdbc:sqlite:devpilot.db");
-    }
 
     public static Connection getConnection() throws SQLException {
         Connection conn = DriverManager.getConnection(URL);
