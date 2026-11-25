@@ -68,11 +68,11 @@ public class DevPilotApp extends Application {
     private void showDashboard() {
         show(new DashboardView(user, syncService, this::showChat,
                 () -> logout(null),
-                () -> logout("Your GitHub session has ended. Please log in again.")));
+                this::sessionExpired));
     }
 
     private void showChat(Repository repo) {
-        show(new ChatView(user, repo, rag, chatDAO, this::showDashboard));
+        show(new ChatView(user, repo, rag, chatDAO, this::showDashboard, this::sessionExpired));
     }
 
     private void show(Parent screen) {
@@ -90,6 +90,10 @@ public class DevPilotApp extends Application {
         } catch (SQLException e) {
             showLogin("Could not save your login to the local database.");
         }
+    }
+
+    private void sessionExpired() {
+        logout("Your GitHub session has ended. Please log in again.");
     }
 
     private void logout(String message) {

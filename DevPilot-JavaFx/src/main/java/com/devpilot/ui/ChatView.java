@@ -15,7 +15,11 @@ import javafx.application.Platform;
 import javafx.concurrent.Task;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.geometry.Side;
+import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.ContextMenu;
+import javafx.scene.control.CustomMenuItem;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ScrollPane;
@@ -24,7 +28,10 @@ import javafx.scene.control.TextFormatter;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
+import javafx.scene.layout.Region;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.scene.shape.SVGPath;
 import javafx.util.Duration;
 
 import java.net.ConnectException;
@@ -39,63 +46,135 @@ import java.util.concurrent.Callable;
 /** Chat about one repository. The conversation is saved in the local database. */
 public class ChatView extends BorderPane {
     private static final int MAX_QUESTION_LENGTH = 2000; // same limit as the RAG service
+    private static final double COLUMN_WIDTH = 760;
 
     private final User user;
     private final Repository repo;
     private final RagClientService rag;
     private final ChatHistoryDAO history;
-    private final VBox messages = new VBox(10);
-    private final ScrollPane scroll = new ScrollPane(messages);
+    private final Runnable onSessionExpired;
+
+    private final VBox messages = new VBox(22);
+    private final VBox notice = new VBox(14); // what to do before asking, or why it isn't possible
+    private final ScrollPane scroll = new ScrollPane();
     private final TextField input = new TextField();
     private final Button sendButton = new Button("Send");
+    private final Label lastEmbedded = new Label();
     private final Button indexButton = new Button();
-    private final Button retryButton = new Button("Retry");
-    private final Label indexLabel = new Label();
-    private final ProgressIndicator indexSpinner = new ProgressIndicator();
+    private final ContextMenu menu = new ContextMenu();
     private final PauseTransition pollDelay = new PauseTransition(Duration.seconds(3));
 
-    // What is true right now; updateControls() derives the screen from these
+    // What is true right now; update() derives the screen from these
     private IndexStatus index; // null = not known (yet)
-    private boolean indexing;
+    private boolean checking;  // asking the service what exists
+    private boolean creating;  // embeddings are being made
     private boolean asking;
+    private String indexError; // null = no problem
     private Task<?> askTask;
     private Task<?> indexTask;
 
-    public ChatView(User user, Repository repo, RagClientService rag, ChatHistoryDAO history, Runnable onBack) {
+    public ChatView(User user, Repository repo, RagClientService rag, ChatHistoryDAO history,
+                    Runnable onBack, Runnable onSessionExpired) {
         this.user = user;
         this.repo = repo;
         this.rag = rag;
         this.history = history;
+        this.onSessionExpired = onSessionExpired;
 
-        Button backButton = new Button("Back");
-        backButton.setId("back");
-        backButton.setOnAction(e -> {
-            if (askTask != null) askTask.cancel();
-            if (indexTask != null) indexTask.cancel();
-            pollDelay.stop();
+        getStyleClass().addAll("app", "chat");
+        setLeft(sidePanel(onBack));
+        setCenter(chatPanel());
+        pollDelay.setOnFinished(e -> loadIndex());
+        loadHistory();
+        loadIndex();
+    }
+
+    // ---- layout ----
+
+    private Node sidePanel(Runnable onBack) {
+        SVGPath arrow = new SVGPath();
+        arrow.setContent("M10 3 5 8l5 5");
+        arrow.getStyleClass().add("line-icon");
+        Button back = new Button();
+        back.setId("back");
+        back.setGraphic(arrow);
+        back.setAccessibleText("Back to repositories");
+        back.getStyleClass().add("icon-button");
+        back.setOnAction(e -> {
+            stop();
             onBack.run();
         });
-        Label title = new Label(repo.getFullName());
-        title.getStyleClass().add("heading");
-        HBox header = new HBox(12, backButton, title);
+        Label owner = new Label(repo.getOwner());
+        owner.getStyleClass().add("muted");
+        Label name = new Label(repo.getName());
+        name.getStyleClass().add("strong");
+        name.setWrapText(true);
+        name.setMinHeight(USE_PREF_SIZE);
+        HBox header = new HBox(10, back, new VBox(owner, name));
         header.setAlignment(Pos.CENTER_LEFT);
+        header.getStyleClass().add("side-header");
 
+        Region files = new Region(); // the file tree goes here
+        VBox.setVgrow(files, Priority.ALWAYS);
+
+        Avatar avatar = new Avatar(36);
+        avatar.show(user.getAvatarUrl());
+        boolean unnamed = user.getDisplayName() == null || user.getDisplayName().isBlank();
+        Button profile = new Button(unnamed ? user.getGithubUsername() : user.getDisplayName(), avatar);
+        profile.setId("profile");
+        profile.getStyleClass().add("profile-button");
+        profile.setMaxWidth(Double.MAX_VALUE);
+        profile.setOnAction(e -> {
+            if (menu.isShowing()) menu.hide();
+            else menu.show(profile, Side.TOP, 0, -8);
+        });
+        buildMenu();
+        StackPane footer = new StackPane(profile);
+        footer.getStyleClass().add("side-footer");
+
+        VBox panel = new VBox(header, files, footer);
+        panel.getStyleClass().add("side");
+        panel.setMinWidth(288);
+        panel.setPrefWidth(288);
+        panel.setMaxWidth(288);
+        return panel;
+    }
+
+    private void buildMenu() {
+        Label title = new Label("Last embedded");
+        title.getStyleClass().add("muted");
+        lastEmbedded.setId("last-embedded");
+        lastEmbedded.getStyleClass().add("strong");
+        lastEmbedded.setWrapText(true);
         indexButton.setId("index");
-        indexButton.setOnAction(e -> createIndex());
-        retryButton.setId("retry");
-        retryButton.setOnAction(e -> loadIndex());
-        retryButton.managedProperty().bind(retryButton.visibleProperty()); // hidden = takes no space
-        indexLabel.setId("index-label");
-        indexLabel.setWrapText(true);
-        indexSpinner.setPrefSize(20, 20);
-        indexSpinner.managedProperty().bind(indexSpinner.visibleProperty());
-        pollDelay.setOnFinished(e -> loadIndex());
-        HBox indexBar = new HBox(12, indexButton, indexSpinner, indexLabel, retryButton);
-        indexBar.setAlignment(Pos.CENTER_LEFT);
+        indexButton.setMaxWidth(Double.MAX_VALUE);
+        indexButton.setOnAction(e -> {
+            menu.hide();
+            createIndex();
+        });
+        VBox content = new VBox(title, lastEmbedded, indexButton);
+        VBox.setMargin(indexButton, new Insets(12, 0, 0, 0));
+        content.setPrefWidth(214); // the menu is 250 wide, minus its padding
+        CustomMenuItem item = new CustomMenuItem(content, false);
+        item.getStyleClass().add("profile-info");
+        menu.getItems().add(item);
+        menu.getStyleClass().addAll("profile-menu", "app");
+    }
 
+    private Node chatPanel() {
         messages.setId("messages");
-        messages.setPadding(new Insets(10));
+        messages.managedProperty().bind(messages.visibleProperty());
+        notice.setId("notice");
+        notice.managedProperty().bind(notice.visibleProperty());
+        VBox column = new VBox(22, messages, notice);
+        column.getStyleClass().add("column");
+        column.setMaxWidth(COLUMN_WIDTH);
+        StackPane centered = new StackPane(column);
+        centered.setAlignment(Pos.TOP_CENTER);
+        scroll.setContent(centered);
         scroll.setFitToWidth(true);
+        scroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        VBox.setVgrow(scroll, Priority.ALWAYS);
 
         input.setId("input");
         input.setPromptText("Ask about this repository");
@@ -103,59 +182,60 @@ public class ChatView extends BorderPane {
                 change.getControlNewText().length() <= MAX_QUESTION_LENGTH ? change : null));
         HBox.setHgrow(input, Priority.ALWAYS);
         sendButton.setId("send");
+        sendButton.getStyleClass().addAll("small", "primary");
+        sendButton.setMinWidth(USE_PREF_SIZE);
+        sendButton.setMaxHeight(Double.MAX_VALUE);
         sendButton.setDefaultButton(true); // Enter sends
         sendButton.setOnAction(e -> send());
-        HBox inputBar = new HBox(12, input, sendButton);
-
-        setPadding(new Insets(20));
-        setTop(new VBox(12, header, indexBar));
-        setCenter(scroll);
-        setBottom(inputBar);
-        BorderPane.setMargin(scroll, new Insets(16, 0, 16, 0));
-        loadHistory();
-        loadIndex();
+        HBox bar = new HBox(10, input, sendButton);
+        bar.getStyleClass().add("ask-bar");
+        bar.setMaxWidth(COLUMN_WIDTH);
+        StackPane ask = new StackPane(bar);
+        ask.setMinHeight(USE_PREF_SIZE);
+        return new VBox(scroll, ask);
     }
 
     // ---- embeddings ----
 
     private void loadIndex() {
-        indexLabel.setText(index != null && index.building() ? "Creating..." : "Checking...");
+        checking = true;
         runIndexTask(() -> rag.indexStatus(user, repo));
     }
 
     private void createIndex() {
-        indexLabel.setText("Creating...");
+        creating = true;
         runIndexTask(() -> rag.createIndex(user, repo));
     }
 
     private void runIndexTask(Callable<IndexStatus> work) {
-        indexing = true;
-        updateControls();
+        indexError = null;
+        update();
         indexTask = Background.run(work, this::showIndex, this::showIndexError);
     }
 
     private void showIndex(IndexStatus status) {
         index = status;
-        indexing = status.building();
-        if (status.building()) {
-            indexLabel.setText("Creating...");
-            pollDelay.playFromStart(); // started earlier: check again until it finishes
-        } else {
-            indexLabel.setText(status.exists() ? describe(status) : "Not created yet");
-        }
-        updateControls();
+        checking = false;
+        creating = status.building();
+        if (creating) pollDelay.playFromStart(); // started earlier: check again until it finishes
+        update();
+        if (!creating && status.exists()) input.requestFocus();
     }
 
     private void showIndexError(Throwable error) {
-        indexing = false;
-        if (error instanceof HttpStatusException http && http.getStatusCode() == 409) {
+        if (isStatus(error, 401)) {
+            expire();
+            return;
+        }
+        if (isStatus(error, 409)) {
             loadIndex(); // already being created: wait for it
             return;
         }
+        checking = false;
+        creating = false;
         if (index != null && index.building()) index = null; // unknown until Retry
-        String text = errorText(error);
-        indexLabel.setText(index != null && index.exists() ? text + " Still using: " + describe(index) : text);
-        updateControls();
+        indexError = errorText(error);
+        update();
     }
 
     private static String describe(IndexStatus status) {
@@ -163,17 +243,42 @@ public class ChatView extends BorderPane {
                 .atZoneSameInstant(ZoneId.systemDefault())
                 .format(DateTimeFormatter.ofPattern("d MMM yyyy, HH:mm", Locale.ENGLISH));
         String commit = status.commit();
-        return "Created " + when + " · commit " + commit.substring(0, Math.min(7, commit.length()));
+        return when + "\ncommit " + commit.substring(0, Math.min(7, commit.length()));
     }
 
-    private void updateControls() {
+    private void update() {
         boolean exists = index != null && index.exists();
+        boolean busy = checking || creating || asking;
         indexButton.setText(exists ? "Re-create embeddings" : "Create vector embeddings");
-        indexButton.setDisable(index == null || indexing || asking);
-        indexSpinner.setVisible(indexing);
-        retryButton.setVisible(index == null && !indexing);
-        input.setDisable(!exists || indexing || asking);
-        sendButton.setDisable(!exists || indexing || asking);
+        indexButton.setDisable(index == null || busy);
+        lastEmbedded.setText(creating ? "Creating..." : checking && index == null ? "Checking..."
+                : index == null ? "Unknown" : exists ? describe(index) : "Not created yet");
+        input.setDisable(!exists || busy);
+        sendButton.setDisable(!exists || busy);
+        showNotice(exists);
+    }
+
+    private void showNotice(boolean exists) {
+        notice.getChildren().clear();
+        if (creating) {
+            notice.getChildren().add(progress("Creating embeddings..."));
+        } else if (checking) {
+            if (index == null) notice.getChildren().add(progress("Checking..."));
+        } else {
+            if (indexError != null) {
+                notice.getChildren().add(text(exists
+                        ? indexError + " Still using the earlier embeddings." : indexError, "error-text"));
+            }
+            if (index == null) {
+                notice.getChildren().add(button("retry", "Retry", false, this::loadIndex));
+            } else if (!exists) {
+                Button create = button("create", "Create vector embeddings", true, this::createIndex);
+                notice.getChildren().addAll(text("No embeddings yet", "notice-title"),
+                        text("Create them to start asking about this repository.", "muted"), create);
+            }
+        }
+        notice.setVisible(!notice.getChildren().isEmpty());
+        if (notice.isVisible()) Platform.runLater(this::scrollToEnd);
     }
 
     // ---- questions ----
@@ -181,20 +286,21 @@ public class ChatView extends BorderPane {
     private void loadHistory() {
         try {
             for (ChatMessage saved : history.findByUserAndRepo(user.getId(), repo.getId())) {
-                addMessage(saved.getQuestion(), "question");
-                addMessage(saved.getAnswer(), "answer");
+                addMessage(question(saved.getQuestion()));
+                addMessage(new AnswerView(saved.getAnswer()));
             }
-            Platform.runLater(this::scrollToEnd); // after this screen is in the window
         } catch (SQLException e) {
-            addMessage("Could not load the saved conversation.", "answer").getStyleClass().add("error");
+            addMessage(error("Could not load the saved conversation."));
         }
+        messages.setVisible(!messages.getChildren().isEmpty());
+        Platform.runLater(this::scrollToEnd); // after this screen is in the window
     }
 
     private void save(String question, String answer) {
         try {
             history.save(new ChatMessage(user.getId(), repo.getId(), question, answer));
         } catch (SQLException e) {
-            addMessage("This answer could not be saved.", "answer").getStyleClass().add("error");
+            addMessage(error("This answer could not be saved."));
         }
     }
 
@@ -202,29 +308,34 @@ public class ChatView extends BorderPane {
         String question = input.getText().strip();
         if (question.isEmpty()) return;
 
-        addMessage(question, "question");
-        Label answer = addMessage("Thinking...", "answer");
+        addMessage(question(question));
+        Node thinking = progress("Thinking...");
+        addMessage(thinking);
         input.clear();
         asking = true;
-        updateControls();
+        update();
         askTask = Background.run(() -> rag.ask(user, repo, question),
                 text -> {
-                    finish(answer, text);
+                    finish(thinking, new AnswerView(text));
                     save(question, text);
                 },
                 error -> {
-                    answer.getStyleClass().add("error");
-                    finish(answer, errorText(error));
+                    if (isStatus(error, 401)) {
+                        expire();
+                        return;
+                    }
+                    finish(thinking, error(errorText(error)));
                     if (input.getText().isEmpty()) input.setText(question); // easy to retry
                 });
     }
 
-    private void finish(Label answer, String text) {
-        answer.setText(text);
+    private void finish(Node thinking, Node reply) {
+        messages.getChildren().remove(thinking);
+        addMessage(reply);
         asking = false;
-        updateControls();
+        update();
         input.requestFocus();
-        scrollToEnd();
+        Platform.runLater(this::scrollToEnd);
     }
 
     private static String errorText(Throwable error) {
@@ -247,14 +358,70 @@ public class ChatView extends BorderPane {
         return "The RAG service returned an error (HTTP " + error.getStatusCode() + ").";
     }
 
-    private Label addMessage(String text, String styleClass) {
+    private static boolean isStatus(Throwable error, int status) {
+        return error instanceof HttpStatusException http && http.getStatusCode() == status;
+    }
+
+    // ---- leaving ----
+
+    /** Stop background work so it can't act on a screen we have left. */
+    private void stop() {
+        if (askTask != null) askTask.cancel();
+        if (indexTask != null) indexTask.cancel();
+        pollDelay.stop();
+        menu.hide();
+    }
+
+    private void expire() {
+        stop();
+        onSessionExpired.run();
+    }
+
+    // ---- pieces ----
+
+    private void addMessage(Node message) {
+        messages.getChildren().add(message);
+        messages.setVisible(true);
+        scrollToEnd();
+    }
+
+    private static Node question(String text) {
+        Label bubble = text(text, "question-bubble");
+        bubble.setMaxWidth(COLUMN_WIDTH * 0.8);
+        HBox row = new HBox(bubble);
+        row.setAlignment(Pos.CENTER_RIGHT);
+        return row;
+    }
+
+    private static Label error(String text) {
+        Label label = text(text, "error-box");
+        label.setMaxWidth(Double.MAX_VALUE);
+        return label;
+    }
+
+    private static Label text(String text, String styleClass) {
         Label label = new Label(text);
         label.setWrapText(true);
-        label.setMinHeight(USE_PREF_SIZE); // show all lines instead of cutting off with "..."
-        label.getStyleClass().addAll("message", styleClass);
-        messages.getChildren().add(label);
-        scrollToEnd();
+        label.setMinHeight(Region.USE_PREF_SIZE); // show all lines instead of cutting off with "..."
+        label.getStyleClass().add(styleClass);
         return label;
+    }
+
+    private static Button button(String id, String text, boolean primary, Runnable action) {
+        Button button = new Button(text);
+        button.setId(id);
+        button.getStyleClass().add("small");
+        if (primary) button.getStyleClass().add("primary");
+        button.setOnAction(e -> action.run());
+        return button;
+    }
+
+    private static Node progress(String text) {
+        ProgressIndicator spinner = new ProgressIndicator();
+        spinner.setPrefSize(20, 20);
+        HBox row = new HBox(12, spinner, text(text, "muted"));
+        row.setAlignment(Pos.CENTER_LEFT);
+        return row;
     }
 
     private void scrollToEnd() {
