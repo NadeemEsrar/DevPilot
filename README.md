@@ -75,6 +75,16 @@ mvn -q compile javafx:run
 4. Ask a question, or open files from the tree on the left.
 5. Click your name at the bottom left to see when the embeddings were made or to re-create them.
 
+## Test
+
+From `DevPilot-JavaFx`:
+
+```bash
+mvn test
+```
+
+The tests use their own database in `target/`, never `devpilot.db`.
+
 ## Project structure
 
 ```text
@@ -88,6 +98,7 @@ DevPilot-JavaFx/
     ui/                 JavaFX screens and components
     util/               database, HTTP, JSON and settings helpers
   src/main/resources/   settings, schema, styles, fonts, logo
+  src/test/             JUnit tests for the DAOs
 DevPilot-RAGService/
   main.py               API endpoints
   models/schemas.py     request and response formats
@@ -118,4 +129,4 @@ docs/                   documentation and images
 - A repository missing from a GitHub sync is removed locally, along with its chats.
 - Notebooks, CSV and SVG files, dependency folders, and files over 200 KB are not indexed.
 - The code viewer has no syntax colors or copying.
-- There are no automated tests yet.
+- Automated tests cover the database classes only, not the screens, network code or RAG service.
