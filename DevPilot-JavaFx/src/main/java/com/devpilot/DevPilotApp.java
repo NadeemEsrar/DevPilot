@@ -23,9 +23,7 @@ import java.util.Optional;
 
 /** Entry point. Owns the window, the logged-in user, and which screen is shown. */
 public class DevPilotApp extends Application {
-    private static final String WELCOME = "Ask questions about your GitHub repositories";
-
-    private final Scene scene = new Scene(new StackPane(), 900, 600);
+    private final Scene scene = new Scene(new StackPane(), 1280, 780);
     private final ChatHistoryDAO chatDAO = new ChatHistoryDAO();
     private final UserDAO userDAO = new UserDAO();
     private final GitHubAuthService auth;
@@ -50,7 +48,7 @@ public class DevPilotApp extends Application {
 
         Optional<User> saved = userDAO.findLoggedIn();
         if (saved.isEmpty()) {
-            showLogin(WELCOME);
+            showLogin(null);
         } else if (!GitHubAuthService.hasRequiredScope(saved.get().getTokenScope())) {
             showLogin("DevPilot needs new permissions. Please log in again.");
         } else {
@@ -69,7 +67,7 @@ public class DevPilotApp extends Application {
 
     private void showDashboard() {
         show(new DashboardView(user, syncService, this::showChat,
-                () -> logout(WELCOME),
+                () -> logout(null),
                 () -> logout("Your GitHub session has ended. Please log in again.")));
     }
 
