@@ -5,6 +5,7 @@ import com.devpilot.dao.UserDAO;
 import com.devpilot.model.Repository;
 import com.devpilot.model.User;
 import com.devpilot.service.GitHubAuthService;
+import com.devpilot.service.GitHubFileService;
 import com.devpilot.service.GitHubRepoService;
 import com.devpilot.service.RagClientService;
 import com.devpilot.service.RepoSyncService;
@@ -28,6 +29,7 @@ public class DevPilotApp extends Application {
     private final UserDAO userDAO = new UserDAO();
     private final GitHubAuthService auth;
     private final RepoSyncService syncService;
+    private final GitHubFileService fileService = new GitHubFileService();
     private final RagClientService rag = new RagClientService();
     private User user;
 
@@ -58,6 +60,8 @@ public class DevPilotApp extends Application {
 
         stage.setTitle("DevPilot");
         stage.setScene(scene);
+        stage.setMinWidth(900);
+        stage.setMinHeight(560);
         stage.show();
     }
 
@@ -72,7 +76,8 @@ public class DevPilotApp extends Application {
     }
 
     private void showChat(Repository repo) {
-        show(new ChatView(user, repo, rag, chatDAO, this::showDashboard, this::sessionExpired));
+        show(new ChatView(user, repo, rag, fileService, chatDAO,
+                this::showDashboard, this::sessionExpired));
     }
 
     private void show(Parent screen) {

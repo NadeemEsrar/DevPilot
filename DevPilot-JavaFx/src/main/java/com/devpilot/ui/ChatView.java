@@ -4,6 +4,9 @@ import com.devpilot.dao.ChatHistoryDAO;
 import com.devpilot.model.ChatMessage;
 import com.devpilot.model.Repository;
 import com.devpilot.model.User;
+import com.devpilot.service.GitHubFileService;
+import com.devpilot.service.GitHubFileService.FileList;
+import com.devpilot.service.GitHubFileService.RepoFile;
 import com.devpilot.service.RagClientService;
 import com.devpilot.service.RagClientService.IndexStatus;
 import com.devpilot.util.HttpClientWrapper.HttpStatusException;
@@ -51,9 +54,13 @@ public class ChatView extends BorderPane {
     private final User user;
     private final Repository repo;
     private final RagClientService rag;
+    private final GitHubFileService fileService;
     private final ChatHistoryDAO history;
     private final Runnable onSessionExpired;
 
+    private final FileTreeView tree = new FileTreeView(this::openFile);
+    private final VBox filesNotice = new VBox(10); // loading, errors, or a shortened list
+    private final CodeView code;
     private final VBox messages = new VBox(22);
     private final VBox notice = new VBox(14); // what to do before asking, or why it isn't possible
     private final ScrollPane scroll = new ScrollPane();
@@ -70,20 +77,29 @@ public class ChatView extends BorderPane {
     private boolean creating;  // embeddings are being made
     private boolean asking;
     private String indexError; // null = no problem
+    private String filesRef;   // the commit or branch the file tree shows
     private Task<?> askTask;
     private Task<?> indexTask;
+    private Task<?> filesTask;
 
-    public ChatView(User user, Repository repo, RagClientService rag, ChatHistoryDAO history,
-                    Runnable onBack, Runnable onSessionExpired) {
+    public ChatView(User user, Repository repo, RagClientService rag, GitHubFileService fileService,
+                    ChatHistoryDAO history, Runnable onBack, Runnable onSessionExpired) {
         this.user = user;
         this.repo = repo;
         this.rag = rag;
+        this.fileService = fileService;
         this.history = history;
         this.onSessionExpired = onSessionExpired;
 
         getStyleClass().addAll("app", "chat");
         setLeft(sidePanel(onBack));
-        setCenter(chatPanel());
+        code = new CodeView(file -> fileService.read(user, repo, file), tree::clearFileSelection, error -> {
+            if (isStatus(error, 401)) expire();
+        });
+        Node chat = chatPanel();
+        HBox.setHgrow(code, Priority.ALWAYS);
+        HBox.setHgrow(chat, Priority.ALWAYS);
+        setCenter(new HBox(code, chat));
         pollDelay.setOnFinished(e -> loadIndex());
         loadHistory();
         loadIndex();
@@ -114,8 +130,11 @@ public class ChatView extends BorderPane {
         header.setAlignment(Pos.CENTER_LEFT);
         header.getStyleClass().add("side-header");
 
-        Region files = new Region(); // the file tree goes here
-        VBox.setVgrow(files, Priority.ALWAYS);
+        filesNotice.setId("files-notice");
+        filesNotice.getStyleClass().add("files-notice");
+        filesNotice.managedProperty().bind(filesNotice.visibleProperty());
+        filesNotice.setVisible(false);
+        VBox.setVgrow(tree, Priority.ALWAYS);
 
         Avatar avatar = new Avatar(36);
         avatar.show(user.getAvatarUrl());
@@ -132,7 +151,7 @@ public class ChatView extends BorderPane {
         StackPane footer = new StackPane(profile);
         footer.getStyleClass().add("side-footer");
 
-        VBox panel = new VBox(header, files, footer);
+        VBox panel = new VBox(header, filesNotice, tree, footer);
         panel.getStyleClass().add("side");
         panel.setMinWidth(288);
         panel.setPrefWidth(288);
@@ -192,7 +211,55 @@ public class ChatView extends BorderPane {
         bar.setMaxWidth(COLUMN_WIDTH);
         StackPane ask = new StackPane(bar);
         ask.setMinHeight(USE_PREF_SIZE);
-        return new VBox(scroll, ask);
+        VBox panel = new VBox(scroll, ask);
+        panel.setMinWidth(320);
+        // Equal preferred widths: the code and chat share the space evenly
+        panel.setPrefWidth(480);
+        code.setPrefWidth(480);
+        return panel;
+    }
+
+    // ---- files ----
+
+    /** Shows the files the answers are based on, or the newest ones if there are no embeddings. */
+    private void loadFiles() {
+        String ref = index != null && index.exists() ? index.commit()
+                : repo.getDefaultBranch() == null ? "HEAD" : repo.getDefaultBranch();
+        if (ref.equals(filesRef)) return; // already shown or loading
+        filesRef = ref;
+        if (filesTask != null) filesTask.cancel();
+        showFilesNotice(progress("Loading files..."));
+        filesTask = Background.run(() -> fileService.list(user, repo, ref), this::showFiles, error -> {
+            if (isStatus(error, 401)) {
+                expire();
+                return;
+            }
+            filesRef = null; // allow another try
+            showFilesNotice(text(isStatus(error, 409) ? "This repository is empty."
+                            : "Could not load the files from GitHub.", "muted"),
+                    button("retry-files", "Retry", false, this::loadFiles));
+        });
+    }
+
+    private void showFiles(FileList list) {
+        tree.show(list.files());
+        if (list.truncated()) showFilesNotice(text("Very large repository: not all files are listed.", "muted"));
+        else showFilesNotice();
+        if (code.file() == null) return;
+        // The commit may have changed: show the open file's version in it
+        String path = code.file().path();
+        list.files().stream().filter(f -> f.path().equals(path)).findFirst().ifPresentOrElse(now -> {
+            if (!now.sha().equals(code.file().sha())) code.open(now);
+        }, code::close);
+    }
+
+    private void showFilesNotice(Node... nodes) {
+        filesNotice.getChildren().setAll(nodes);
+        filesNotice.setVisible(nodes.length > 0);
+    }
+
+    private void openFile(RepoFile file) {
+        code.open(file);
     }
 
     // ---- embeddings ----
@@ -217,6 +284,7 @@ public class ChatView extends BorderPane {
         index = status;
         checking = false;
         creating = status.building();
+        loadFiles();
         if (creating) pollDelay.playFromStart(); // started earlier: check again until it finishes
         update();
         if (!creating && status.exists()) input.requestFocus();
@@ -227,7 +295,8 @@ public class ChatView extends BorderPane {
             expire();
             return;
         }
-        if (isStatus(error, 409)) {
+        if (isStatus(error, 409) && creating) {
+            creating = false;
             loadIndex(); // already being created: wait for it
             return;
         }
@@ -235,6 +304,7 @@ public class ChatView extends BorderPane {
         creating = false;
         if (index != null && index.building()) index = null; // unknown until Retry
         indexError = errorText(error);
+        loadFiles();
         update();
     }
 
@@ -368,6 +438,8 @@ public class ChatView extends BorderPane {
     private void stop() {
         if (askTask != null) askTask.cancel();
         if (indexTask != null) indexTask.cancel();
+        if (filesTask != null) filesTask.cancel();
+        code.stop();
         pollDelay.stop();
         menu.hide();
     }
