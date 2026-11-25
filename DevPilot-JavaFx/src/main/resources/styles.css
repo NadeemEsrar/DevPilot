@@ -1,3 +1,9 @@
+/* JavaFX sees each weight as its own family, so use the family name instead of a weight */
+@font-face { src: url("fonts/Inter-Regular.ttf"); }
+@font-face { src: url("fonts/Inter-Medium.ttf"); }
+@font-face { src: url("fonts/Inter-SemiBold.ttf"); }
+@font-face { src: url("fonts/JetBrainsMono-Medium.ttf"); }
+
 /* Shared colors: change one here and every use follows */
 .root {
     -dp-text: #1f1f21;
@@ -10,18 +16,75 @@
     -dp-primary-hover: #3a3a3c;
     -dp-focus: #2563eb;
     -dp-error: #b42318;
+    -fx-font-family: "Inter";
     -fx-font-size: 14px;
 }
 
-.title { -fx-font-size: 36px; -fx-font-weight: bold; }
-.heading { -fx-font-size: 20px; -fx-font-weight: bold; }
+.title { -fx-font-size: 36px; -fx-font-family: "Inter SemiBold"; }
+.heading { -fx-font-size: 20px; -fx-font-family: "Inter SemiBold"; }
 .message { -fx-padding: 10px; -fx-background-radius: 8px; }
 .question { -fx-background-color: #d6e8ff; }
 .answer { -fx-background-color: #e4e4e4; }
 .error { -fx-background-color: #ffdcdc; }
 
+/* Shared by the redesigned screens */
+.app { -fx-background-color: white; -fx-font-size: 15px; }
+.app .label { -fx-text-fill: -dp-text; }
+.app .muted { -fx-text-fill: -dp-muted; }
+.app .error-text { -fx-text-fill: -dp-error; }
+.app .medium { -fx-font-family: "Inter Medium"; }
+.app .strong { -fx-font-family: "Inter SemiBold"; }
+.app .page-title { -fx-font-family: "Inter SemiBold"; -fx-font-size: 26px; -fx-text-fill: -dp-heading; }
+.app .progress-indicator { -fx-progress-color: -dp-muted; }
+
+.app .button {
+    -fx-background-color: -dp-button;
+    -fx-background-radius: 10px;
+    -fx-background-insets: 0;
+    -fx-text-fill: -dp-text;
+    -fx-font-size: 16px;
+    -fx-font-family: "Inter SemiBold";
+    -fx-graphic-text-gap: 12px;
+    -fx-cursor: hand;
+}
+.app .button:hover { -fx-background-color: -dp-button-hover; }
+.app .button:armed { -fx-background-color: -dp-button-pressed; }
+.app .button.primary { -fx-background-color: -dp-primary; -fx-text-fill: white; }
+.app .button.primary:hover, .app .button.primary:armed { -fx-background-color: -dp-primary-hover; }
+/* A blue ring, only when moving with the keyboard */
+.app .button:focus-visible, .app .hyperlink:focus-visible {
+    -fx-border-color: -dp-focus;
+    -fx-border-width: 2px;
+    -fx-border-radius: 12px;
+    -fx-border-insets: -4px;
+}
+.app .button.small { -fx-font-size: 14px; -fx-padding: 10px 16px; }
+.app .text-field {
+    -fx-background-color: white;
+    -fx-background-radius: 10px;
+    -fx-border-color: #dcdcde;
+    -fx-border-radius: 10px;
+    -fx-padding: 10px 14px;
+    -fx-prompt-text-fill: -dp-muted;
+}
+.app .text-field:focused { -fx-border-color: -dp-focus; }
+.avatar { -fx-fill: -dp-button; }
+.avatar-person { -fx-fill: #9a9aa0; }
+.app .button.avatar-button, .app .button.avatar-button:hover, .app .button.avatar-button:armed {
+    -fx-background-color: transparent;
+    -fx-padding: 0;
+}
+
+/* Slim scrollbars */
+.app .scroll-bar { -fx-background-color: transparent; -fx-padding: 2px; }
+.app .scroll-bar .track { -fx-background-color: transparent; -fx-border-color: transparent; }
+.app .scroll-bar .thumb { -fx-background-color: #c8c8cc; -fx-background-radius: 4px; -fx-background-insets: 0; }
+.app .scroll-bar .increment-button, .app .scroll-bar .decrement-button { -fx-padding: 0; }
+.app .scroll-bar .increment-arrow, .app .scroll-bar .decrement-arrow { -fx-padding: 0; -fx-shape: ""; }
+.app .scroll-bar:vertical { -fx-pref-width: 10px; }
+.app .scroll-bar:horizontal { -fx-pref-height: 10px; }
+
 /* Login */
-.login { -fx-background-color: white; -fx-font-size: 15px; }
 .login-card {
     -fx-background-color: white;
     -fx-background-radius: 20px;
@@ -29,46 +92,76 @@
     -fx-spacing: 24px;
     -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.11), 40, 0, 0, 4);
 }
-.login-title { -fx-font-size: 26px; -fx-font-weight: bold; -fx-text-fill: -dp-heading; }
-.login-text { -fx-text-fill: -dp-muted; }
-.login-error { -fx-text-fill: -dp-error; }
-.login-code {
+.app .login-title { -fx-font-size: 26px; -fx-font-family: "Inter SemiBold"; -fx-text-fill: -dp-heading; }
+.app .login-text { -fx-text-fill: -dp-muted; }
+.app .login-error { -fx-text-fill: -dp-error; }
+.app .login-code {
     -fx-background-color: #f4f4f5;
     -fx-background-radius: 12px;
     -fx-padding: 20px 8px;
-    -fx-font-family: "Menlo";
+    -fx-font-family: "JetBrains Mono Medium";
     -fx-font-size: 32px;
     -fx-text-fill: -dp-text;
     -fx-alignment: center;
 }
 .login .hyperlink {
+    -fx-font-family: "Inter Medium";
     -fx-text-fill: -dp-text;
     -fx-underline: true;
     -fx-padding: 0;
     -fx-border-width: 0;
 }
 .login .hyperlink:hover { -fx-text-fill: -dp-focus; }
-.login .progress-indicator { -fx-progress-color: -dp-muted; }
-
-.login .button {
-    -fx-background-color: -dp-button;
-    -fx-background-radius: 10px;
-    -fx-background-insets: 0;
-    -fx-text-fill: -dp-text;
-    -fx-font-size: 16px;
-    -fx-font-weight: bold;
-    -fx-graphic-text-gap: 12px;
-    -fx-cursor: hand;
-}
-.login .button:hover { -fx-background-color: -dp-button-hover; }
-.login .button:armed { -fx-background-color: -dp-button-pressed; }
-.login .button.primary { -fx-background-color: -dp-primary; -fx-text-fill: white; }
-.login .button.primary:hover, .login .button.primary:armed { -fx-background-color: -dp-primary-hover; }
-/* A blue ring, only when moving with the keyboard */
-.login .button:focus-visible, .login .hyperlink:focus-visible {
-    -fx-border-color: -dp-focus;
-    -fx-border-width: 2px;
-    -fx-border-radius: 12px;
-    -fx-border-insets: -4px;
-}
 .github-mark { -fx-fill: -dp-text; }
+
+/* Dashboard */
+.top-bar {
+    -fx-padding: 14px 36px;
+    -fx-border-color: transparent transparent #dcdcde transparent;
+}
+.page { -fx-padding: 28px 36px; }
+.dashboard .list-view {
+    -fx-background-color: white;
+    -fx-background-insets: 0;
+    -fx-background-radius: 20px;
+    -fx-padding: 10px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.11), 40, 0, 0, 4);
+}
+.dashboard .list-view .scroll-bar:horizontal { -fx-opacity: 0; -fx-pref-height: 0; }
+.dashboard .list-cell {
+    -fx-background-color: transparent;
+    -fx-background-radius: 12px;
+    -fx-padding: 0 18px;
+}
+.dashboard .list-cell:filled:hover { -fx-background-color: #f6f6f7; }
+.dashboard .list-cell:filled:selected { -fx-background-color: #ececee; }
+.dashboard .list-view:focus-visible .list-cell:filled:focused {
+    -fx-border-color: -dp-focus;
+    -fx-border-radius: 12px;
+}
+.app .tag {
+    -fx-background-color: #ececee;
+    -fx-background-radius: 8px;
+    -fx-padding: 2px 9px;
+    -fx-font-family: "Inter Medium";
+    -fx-font-size: 12px;
+    -fx-text-fill: -dp-muted;
+}
+.dashboard .list-cell:selected .tag { -fx-background-color: white; }
+
+/* The menu is its own window, so it repeats the font size */
+.profile-menu {
+    -fx-background-color: white;
+    -fx-background-radius: 16px;
+    -fx-padding: 8px;
+    -fx-pref-width: 250px;
+    -fx-font-size: 15px;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.16), 30, 0, 0, 4);
+}
+.profile-menu .menu-item { -fx-padding: 10px; -fx-background-radius: 10px; -fx-background-color: transparent; }
+.profile-menu .menu-item:focused { -fx-background-color: #ececee; }
+.profile-menu .profile-info:focused { -fx-background-color: transparent; }
+.profile-menu .label { -fx-text-fill: -dp-text; }
+.profile-menu .strong { -fx-font-family: "Inter SemiBold"; }
+.profile-menu .muted { -fx-text-fill: -dp-muted; -fx-font-size: 14px; }
+.profile-menu .menu-item > .label { -fx-font-family: "Inter Medium"; }

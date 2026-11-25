@@ -63,7 +63,7 @@ public class LoginView extends BorderPane {
         StackPane center = new StackPane(card);
         center.setPadding(new Insets(24, 16, 104, 16));
 
-        getStyleClass().add("login");
+        getStyleClass().addAll("app", "login");
         setTop(header);
         setCenter(center);
         showReady(error);
