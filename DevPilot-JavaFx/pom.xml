@@ -11,8 +11,6 @@
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <!-- Override with -Dexec.mainClass=... -->
-        <exec.mainClass>com.devpilot.Phase4Demo</exec.mainClass>
     </properties>
 
     <dependencies>
@@ -50,15 +48,6 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.2</version>
-            </plugin>
-            <!-- Lets us run: mvn compile exec:java -->
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>exec-maven-plugin</artifactId>
-                <version>3.1.0</version>
-                <configuration>
-                    <mainClass>${exec.mainClass}</mainClass>
-                </configuration>
             </plugin>
             <!-- Runs the desktop app: mvn compile javafx:run -->
             <plugin>

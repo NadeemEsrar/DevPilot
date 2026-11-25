@@ -106,8 +106,6 @@ DevPilot-RAGService/
 docs/                   documentation and images
 ```
 
-`Phase1Demo` to `Phase4Demo` are console programs kept from the early development steps.
-
 ## Documentation
 
 - [Architecture](docs/architecture.md)

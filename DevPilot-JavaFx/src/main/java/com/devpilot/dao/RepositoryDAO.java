@@ -23,8 +23,8 @@ public class RepositoryDAO {
                    + "html_url=excluded.html_url, description=excluded.description";
 
     /**
-     * Insert or update one repo. "Upsert" matters because in Phase 4 we will
-     * re-sync the list from GitHub repeatedly and must not create duplicates.
+     * Insert or update one repo. "Upsert" matters because the list is synced
+     * from GitHub repeatedly and must not create duplicates.
      */
     public Repository save(Repository repo) throws SQLException {
         try (Connection conn = DBConnection.getConnection();
